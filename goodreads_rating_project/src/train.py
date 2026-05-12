@@ -1,6 +1,6 @@
 # src/train.py
 """
-Практическое занятие №8: Обучение модели для предсказания рейтинга книг
+Обучение модели на реальных данных Goodreads Books (11 117 книг)
 """
 
 import pandas as pd
@@ -15,7 +15,7 @@ import joblib
 import os
 
 print("=" * 60)
-print("ПРОГНОЗИРОВАНИЕ РЕЙТИНГА КНИГ")
+print("🚀 ПРОГНОЗИРОВАНИЕ РЕЙТИНГА КНИГ GOODREADS")
 print("=" * 60)
 
 # ============================================
@@ -25,157 +25,169 @@ print("\n1. ЗАГРУЗКА ДАННЫХ")
 print("-" * 40)
 
 df = pd.read_csv('../data/books.csv')
-print(f"Загружено {len(df)} строк")
+print(f"✅ Загружено {len(df)} книг")
 
-# Объяснение признаков
-print("\nПРИЗНАКИ (X):")
-print("  - num_pages: количество страниц")
-print("  - ratings_count: количество оценок")
-print("  - text_reviews_count: количество отзывов")
-print("  - publication_year: год публикации")
-print("\nЦЕЛЕВАЯ ПЕРЕМЕННАЯ (y):")
-print("  - average_rating: средний рейтинг (от 1 до 5)")
+# Переименовываем колонку с лишними пробелами
+df.rename(columns={'  num_pages': 'num_pages'}, inplace=True)
 
 # ============================================
-# 2. ПОДГОТОВКА ДАННЫХ
+# 2. ПОДГОТОВКА ПРИЗНАКОВ
 # ============================================
-print("\n2. ПОДГОТОВКА ДАННЫХ")
+print("\n2. ПОДГОТОВКА ПРИЗНАКОВ")
 print("-" * 40)
 
-X = df[['num_pages', 'ratings_count', 'text_reviews_count', 'publication_year']]
-y = df['average_rating']
+# Признаки
+feature_columns = ['num_pages', 'ratings_count', 'text_reviews_count']
+target_column = 'average_rating'
 
-# Масштабирование
+# Извлекаем год из publication_date
+df['publication_year'] = pd.to_datetime(df['publication_date'], errors='coerce').dt.year
+feature_columns.append('publication_year')
+
+# Удаляем пропуски
+df_clean = df[feature_columns + [target_column]].dropna()
+print(f"✅ После очистки: {len(df_clean)} книг")
+
+X = df_clean[feature_columns]
+y = df_clean[target_column]
+
+print(f"\n🔹 Признаки (X): {', '.join(feature_columns)}")
+print(f"🔹 Цель (y): {target_column}")
+
+# ============================================
+# 3. МАСШТАБИРОВАНИЕ И РАЗДЕЛЕНИЕ
+# ============================================
+print("\n3. МАСШТАБИРОВАНИЕ И РАЗДЕЛЕНИЕ")
+print("-" * 40)
+
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
-print("✅ Признаки масштабированы")
 
-# Разделение на обучающую (80%) и тестовую (20%)
 X_train, X_test, y_train, y_test = train_test_split(
     X_scaled, y, test_size=0.2, random_state=42
 )
-print(f"✅ Обучающая выборка: {len(X_train)} примеров")
-print(f"✅ Тестовая выборка: {len(X_test)} примеров (в 'сейфе')")
+
+print(f"✅ Обучение: {len(X_train)} книг (80%)")
+print(f"✅ Тест (сейф): {len(X_test)} книг (20%)")
 
 # ============================================
-# 3. ОБУЧЕНИЕ МОДЕЛЕЙ
+# 4. ОБУЧЕНИЕ МОДЕЛЕЙ
 # ============================================
-print("\n3. ОБУЧЕНИЕ МОДЕЛЕЙ")
+print("\n4. ОБУЧЕНИЕ МОДЕЛЕЙ")
 print("-" * 40)
 
-# Модель 1: Линейная регрессия
-print("\nОбучаем Линейную регрессию...")
+# Линейная регрессия
+print("\n📈 LinearRegression...")
 lr = LinearRegression()
 lr.fit(X_train, y_train)
 lr_pred = lr.predict(X_test)
 lr_mae = mean_absolute_error(y_test, lr_pred)
 lr_r2 = r2_score(y_test, lr_pred)
-print(f"  MAE: {lr_mae:.3f}")
-print(f"  R2:  {lr_r2:.3f}")
+print(f"   MAE: {lr_mae:.4f}")
+print(f"   R²:  {lr_r2:.4f}")
 
-# Модель 2: Случайный лес
-print("\nОбучаем Случайный лес...")
-rf = RandomForestRegressor(n_estimators=100, random_state=42)
+# Случайный лес
+print("\n🌲 RandomForestRegressor...")
+rf = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
 rf.fit(X_train, y_train)
 rf_pred = rf.predict(X_test)
 rf_mae = mean_absolute_error(y_test, rf_pred)
 rf_r2 = r2_score(y_test, rf_pred)
-print(f"  MAE: {rf_mae:.3f}")
-print(f"  R2:  {rf_r2:.3f}")
+print(f"   MAE: {rf_mae:.4f}")
+print(f"   R²:  {rf_r2:.4f}")
 
 # ============================================
-# 4. КРОСС-ВАЛИДАЦИЯ
+# 5. КРОСС-ВАЛИДАЦИЯ
 # ============================================
-print("\n4. КРОСС-ВАЛИДАЦИЯ (5-fold)")
+print("\n5. КРОСС-ВАЛИДАЦИЯ (5-fold)")
 print("-" * 40)
 
 lr_cv = cross_val_score(lr, X_scaled, y, cv=5, scoring='r2')
 rf_cv = cross_val_score(rf, X_scaled, y, cv=5, scoring='r2')
 
-print(f"Линейная регрессия: {lr_cv.mean():.3f} (+/- {lr_cv.std():.3f})")
-print(f"Случайный лес:      {rf_cv.mean():.3f} (+/- {rf_cv.std():.3f})")
+print(f"LinearRegression: R² = {lr_cv.mean():.4f} (±{lr_cv.std():.4f})")
+print(f"RandomForest:     R² = {rf_cv.mean():.4f} (±{rf_cv.std():.4f})")
 
 # ============================================
-# 5. АНАЛИЗ ОШИБОК
+# 6. ВИЗУАЛИЗАЦИЯ
 # ============================================
-print("\n5. АНАЛИЗ ОШИБОК")
+print("\n6. ВИЗУАЛИЗАЦИЯ ОШИБОК")
 print("-" * 40)
 
-errors = y_test - rf_pred
-print(f"Средняя ошибка: {errors.mean():.3f}")
-print(f"Стандартное отклонение ошибки: {errors.std():.3f}")
+errors = y_test - lr_pred
 
-# Визуализация
-plt.figure(figsize=(10, 4))
+plt.figure(figsize=(12, 5))
 
 plt.subplot(1, 2, 1)
-plt.scatter(y_test, rf_pred, alpha=0.5)
-plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
+plt.scatter(y_test, lr_pred, alpha=0.3, edgecolors='k', linewidth=0.5)
+plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--', lw=2)
 plt.xlabel("Фактический рейтинг")
 plt.ylabel("Предсказанный рейтинг")
-plt.title("Предсказания vs Факт")
+plt.title(f"LinearRegression: предсказания vs факт\nMAE = {lr_mae:.3f}")
 
 plt.subplot(1, 2, 2)
-plt.hist(errors, bins=20, edgecolor='black')
+plt.hist(errors, bins=30, edgecolor='black', alpha=0.7)
+plt.axvline(x=0, color='r', linestyle='--')
 plt.xlabel("Ошибка предсказания")
-plt.ylabel("Количество")
-plt.title("Распределение ошибок")
+plt.ylabel("Количество книг")
+plt.title(f"Распределение ошибок\nсредняя = {errors.mean():.3f}, std = {errors.std():.3f}")
 
 plt.tight_layout()
-plt.savefig('../models/error_plot.png')
-print("✅ График ошибок сохранен в 'models/error_plot.png'")
+os.makedirs('../models', exist_ok=True)
+plt.savefig('../models/error_plot.png', dpi=150)
+print("✅ График сохранен: models/error_plot.png")
 
 # ============================================
-# 6. ВЫБОР ЛУЧШЕЙ МОДЕЛИ И СОХРАНЕНИЕ
+# 7. ВЫБОР И СОХРАНЕНИЕ МОДЕЛИ
 # ============================================
-print("\n6. ВЫБОР ЛУЧШЕЙ МОДЕЛИ")
+print("\n7. ВЫБОР И СОХРАНЕНИЕ МОДЕЛИ")
 print("-" * 40)
 
-if rf_mae < lr_mae:
-    best_model = rf
-    best_name = "RandomForestRegressor"
-    best_metric = rf_mae
-else:
+if lr_mae <= rf_mae:
     best_model = lr
     best_name = "LinearRegression"
-    best_metric = lr_mae
+    best_mae = lr_mae
+    best_r2 = lr_r2
+else:
+    best_model = rf
+    best_name = "RandomForestRegressor"
+    best_mae = rf_mae
+    best_r2 = rf_r2
 
-print(f"Лучшая модель: {best_name}")
-print(f"MAE на тестовых данных: {best_metric:.3f}")
+print(f"✅ Лучшая модель: {best_name}")
+print(f"✅ MAE: {best_mae:.4f}")
+print(f"✅ R²:  {best_r2:.4f}")
 
-# Сохраняем модель
-os.makedirs('../models', exist_ok=True)
+# Сохраняем
 joblib.dump(best_model, '../models/best_model.pkl')
 joblib.dump(scaler, '../models/scaler.pkl')
-print("✅ Модель сохранена в 'models/best_model.pkl'")
-print("✅ Scaler сохранен в 'models/scaler.pkl'")
+print("✅ Модель сохранена: models/best_model.pkl")
+print("✅ Scaler сохранен: models/scaler.pkl")
 
 # ============================================
-# 7. ИТОГОВЫЙ ОТЧЕТ
+# 8. ИТОГОВЫЙ ОТЧЕТ
 # ============================================
 print("\n" + "=" * 60)
-print("ИТОГОВЫЙ ОТЧЕТ")
+print("📊 ИТОГОВЫЙ ОТЧЕТ")
 print("=" * 60)
 
 print(f"""
-ЛУЧШАЯ МОДЕЛЬ: {best_name}
+РЕЗУЛЬТАТЫ НА {len(df_clean)} КНИГАХ:
 
-КЛЮЧЕВЫЕ МЕТРИКИ:
-- MAE (средняя абсолютная ошибка): {best_metric:.3f} звезды
-- R² (коэффициент детерминации): {rf_r2 if best_name == 'RandomForestRegressor' else lr_r2:.3f}
+┌─────────────────────────────────────────────────────────────┐
+│  Модель: {best_name:<30} │
+│  MAE: {best_mae:.4f} звезды (ошибка в {best_mae:.2f} балла)     │
+│  R²:  {best_r2:.4f}                                         │
+└─────────────────────────────────────────────────────────────┘
 
 ИНТЕРПРЕТАЦИЯ:
-- Модель ошибается в среднем на {best_metric:.2f} звезды
-- Это {'хороший' if best_metric < 0.3 else 'средний'} результат для предсказания рейтинга
-
-ЧАЩЕ ВСЕГО МОДЕЛЬ ОШИБАЕТСЯ:
-- На книгах с рейтингом около {y_test.iloc[errors.abs().argmax()]:.1f} звезд
-- Причина: не хватает информации о жанре и авторе
+• Модель ошибается в среднем на {best_mae:.2f} звезды
+• Это {'отличный' if best_mae < 0.25 else 'хороший'} результат
 
 СОЗДАННЫЕ ФАЙЛЫ:
-- models/best_model.pkl - обученная модель
-- models/scaler.pkl - scaler для масштабирования
-- models/error_plot.png - визуализация ошибок
+• models/best_model.pkl - обученная модель
+• models/scaler.pkl - scaler
+• models/error_plot.png - визуализация ошибок
 """)
 
-print("\n✅ ГОТОВО! Модель можно использовать для предсказаний.")
+print("\n✅ Готово!")
